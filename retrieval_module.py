@@ -52,43 +52,20 @@ class CrossModalAttention(torch.nn.Module):
 
 
 class ImprovedProjectionHead(torch.nn.Module):
-    """改进的投影头，使用残差连接和更深的网络"""
-    def __init__(self, input_dim, output_dim=1024, hidden_dim=2048, dropout=0.1):
+    """简化的投影头，2层MLP更容易训练"""
+    def __init__(self, input_dim, output_dim=1024, hidden_dim=1024, dropout=0.1):
         super().__init__()
+        # 简化为2层，hidden_dim也减小
         self.fc1 = torch.nn.Linear(input_dim, hidden_dim)
-        self.ln1 = torch.nn.LayerNorm(hidden_dim)  # 使用LayerNorm替代BatchNorm，更稳定
-        self.fc2 = torch.nn.Linear(hidden_dim, hidden_dim)
-        self.ln2 = torch.nn.LayerNorm(hidden_dim)
-        self.fc3 = torch.nn.Linear(hidden_dim, output_dim)
+        self.fc2 = torch.nn.Linear(hidden_dim, output_dim)
         self.dropout = torch.nn.Dropout(dropout)
         self.activation = torch.nn.GELU()
         
-        # 残差连接（如果维度匹配）
-        self.use_residual = (input_dim == output_dim)
-        if not self.use_residual and input_dim != hidden_dim:
-            self.residual_proj = torch.nn.Linear(input_dim, output_dim)
-        
     def forward(self, x):
-        identity = x
-        
         out = self.fc1(x)
-        out = self.ln1(out)
         out = self.activation(out)
         out = self.dropout(out)
-        
         out = self.fc2(out)
-        out = self.ln2(out)
-        out = self.activation(out)
-        out = self.dropout(out)
-        
-        out = self.fc3(out)
-        
-        # 残差连接
-        if self.use_residual:
-            out = out + identity
-        elif hasattr(self, 'residual_proj'):
-            out = out + self.residual_proj(identity)
-            
         return out
 
 
@@ -118,7 +95,7 @@ class AudioRetrievalModel(pl.LightningModule):
         use_improved_projection = kwargs.get('use_improved_projection', True)
         
         if use_improved_projection:
-            self.audio_projection = ImprovedProjectionHead(768, 1024, hidden_dim=2048, dropout=0.1)
+            self.audio_projection = ImprovedProjectionHead(768, 1024, hidden_dim=1024, dropout=0.1)
         elif use_mlp:
             self.audio_projection = torch.nn.Sequential(
                 torch.nn.Linear(768, 1024),
@@ -150,7 +127,7 @@ class AudioRetrievalModel(pl.LightningModule):
         
         text_dim = 768 if kwargs['roberta_base'] else 1024
         if use_improved_projection:
-            self.text_projection = ImprovedProjectionHead(text_dim, 1024, hidden_dim=2048, dropout=0.1)
+            self.text_projection = ImprovedProjectionHead(text_dim, 1024, hidden_dim=1024, dropout=0.1)
         elif use_mlp:
             self.text_projection = torch.nn.Sequential(
                 torch.nn.Linear(text_dim, 1024),

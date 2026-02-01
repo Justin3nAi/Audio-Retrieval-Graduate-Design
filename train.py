@@ -223,16 +223,38 @@ if __name__ == '__main__':
 
         print("Contents of data path:", os.listdir(args["data_path"]))
         os.makedirs(args["data_path"], exist_ok=True)
+        
+        # 数据集已手动下载，禁用自动下载
         # download data sets; will be ignored if exists
         # ClothoV2.1
         # download_clotho(args["data_path"])
-        # # AudioCAps
+        # AudioCAps
         # if args['audiocaps']:
         #     download_audiocaps(args["data_path"])
-        # # WavCaps
+        # WavCaps
         # if args['wavcaps']:
         #     download_wavcaps_mp3(args["data_path"])
-        #     # download_wavcaps(args["data_path"], args["huggingface_cache_path"])
+        
+        # 验证数据集是否存在
+        if args['audiocaps']:
+            audiocaps_path = os.path.join(args["data_path"], "AUDIOCAPS")
+            if not os.path.exists(audiocaps_path):
+                raise FileNotFoundError(f"❌ AudioCaps数据集未找到！请确保已解压到: {audiocaps_path}")
+            else:
+                print(f"✅ 找到AudioCaps数据集: {audiocaps_path}")
+                # 检查关键文件和目录
+                audio_dir = os.path.join(audiocaps_path, "audio_32000Hz")
+                train_dir = os.path.join(audio_dir, "train")
+                train_csv = os.path.join(audiocaps_path, "train.csv")
+                
+                print(f"   📁 检查目录结构:")
+                print(f"      - audio_32000Hz/: {'✅ 存在' if os.path.exists(audio_dir) else '❌ 不存在'}")
+                print(f"      - audio_32000Hz/train/: {'✅ 存在' if os.path.exists(train_dir) else '❌ 不存在'}")
+                print(f"      - train.csv: {'✅ 存在' if os.path.exists(train_csv) else '❌ 不存在'}")
+                
+                if os.path.exists(train_dir):
+                    audio_files = [f for f in os.listdir(train_dir) if f.endswith('.mp3')]
+                    print(f"      - 训练音频文件数: {len(audio_files)} 个")
 
         # set a seed to make experiments reproducible
         
@@ -283,13 +305,52 @@ if __name__ == '__main__':
         # train
         if args['train']:
             # get training ad validation data sets; add the resampling transformation
+            print("=" * 50)
+            print("📊 加载训练数据集...")
+            print("=" * 50)
+            
             train_ds = custom_loading(Clotho(subset="dev", root=args["data_path"], flat_captions=True))
+            print(f"✅ Clotho dev: {len(train_ds)} 样本")
 
             if args['audiocaps']:
-                ac = custom_loading(
-                    AudioCaps(subset="train", root=args["data_path"], download=True, download_audio=False, audio_format='mp3')
-                )
-                train_ds = torch.utils.data.ConcatDataset([train_ds, ac])
+                print("📥 加载AudioCaps数据集...")
+                try:
+                    ac = custom_loading(
+                        AudioCaps(
+                            subset="train", 
+                            root=args["data_path"], 
+                            download=False,  # 禁用自动下载
+                            download_audio=False, 
+                            audio_format='mp3'
+                        )
+                    )
+                    print(f"✅ AudioCaps train 加载成功: {len(ac)} 样本")
+                    
+                    # 显示第一个样本的详细信息来验证
+                    if len(ac) > 0:
+                        sample = ac[0]
+                        print(f"   📄 第一个样本信息:")
+                        print(f"      - 音频文件: {sample.get('fname', 'N/A')}")
+                        print(f"      - 音频形状: {sample.get('audio', torch.tensor([])).shape if 'audio' in sample else 'N/A'}")
+                        print(f"      - 标注文本: {sample.get('captions', ['N/A'])[0] if 'captions' in sample else 'N/A'}")
+                        print(f"      - 数据集来源: {sample.get('dataset', 'N/A')}")
+                    
+                    # 合并数据集
+                    clotho_count = len(train_ds)
+                    train_ds = torch.utils.data.ConcatDataset([train_ds, ac])
+                    print(f"✅ 数据集合并成功!")
+                    print(f"   - Clotho: {clotho_count} 样本")
+                    print(f"   - AudioCaps: {len(ac)} 样本")
+                    print(f"   - 总计: {len(train_ds)} 样本")
+                    print(f"   - 数据增加: {len(train_ds) - clotho_count} 样本 ({(len(ac)/clotho_count)*100:.1f}% 增长)")
+                    
+                except Exception as e:
+                    print(f"❌ AudioCaps加载失败: {e}")
+                    print(f"   错误类型: {type(e).__name__}")
+                    print(f"   错误详情: {str(e)}")
+                    print("提示：请检查数据集路径和文件结构")
+                    print(f"   预期路径: {os.path.join(args['data_path'], 'AUDIOCAPS')}")
+                    raise
 
             if args['wavcaps']:
                 # load the subsets
@@ -300,6 +361,8 @@ if __name__ == '__main__':
                 train_ds = torch.utils.data.ConcatDataset([train_ds, wc_f, wc_b, wc_s, wc_a])
 
             val_ds = custom_loading(Clotho(subset="val", root=args["data_path"], flat_captions=True))
+            print(f"✅ Clotho val: {len(val_ds)} 样本")
+            print("=" * 50)
 
             model = train(model, train_ds, val_ds, logger, args)
 
