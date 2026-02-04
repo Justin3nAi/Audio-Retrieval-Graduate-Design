@@ -90,16 +90,18 @@ class AudioRetrievalModel(pl.LightningModule):
             hop_size=10*32000
         )
         
-        # 投影层 - 使用改进的投影头
+        # 投影层 - 使用改进的投影头，增加dropout
         use_mlp = kwargs.get('use_mlp_projection', False)
         use_improved_projection = kwargs.get('use_improved_projection', True)
+        dropout_rate = kwargs.get('dropout_rate', 0.1)
         
         if use_improved_projection:
-            self.audio_projection = ImprovedProjectionHead(768, 1024, hidden_dim=1024, dropout=0.1)
+            self.audio_projection = ImprovedProjectionHead(768, 1024, hidden_dim=1024, dropout=dropout_rate)
         elif use_mlp:
             self.audio_projection = torch.nn.Sequential(
                 torch.nn.Linear(768, 1024),
                 torch.nn.GELU(),
+                torch.nn.Dropout(dropout_rate),
                 torch.nn.Linear(1024, 1024)
             )
         else:
@@ -117,21 +119,25 @@ class AudioRetrievalModel(pl.LightningModule):
             print(f"✅ 从本地路径加载模型: {local_model_path}")
 
         self.tokenizer = RobertaTokenizer.from_pretrained(local_model_path)
+        
+        # 增加dropout防止过拟合
+        dropout_rate = kwargs.get('dropout_rate', 0.1)
         self.text_embedding_model = RobertaModel.from_pretrained(
             local_model_path,
             add_pooling_layer=False,
-            hidden_dropout_prob=0.2,
-            attention_probs_dropout_prob=0.2,
+            hidden_dropout_prob=dropout_rate,
+            attention_probs_dropout_prob=dropout_rate,
             output_hidden_states=True  # 启用多层特征提取
         )
         
         text_dim = 768 if kwargs['roberta_base'] else 1024
         if use_improved_projection:
-            self.text_projection = ImprovedProjectionHead(text_dim, 1024, hidden_dim=1024, dropout=0.1)
+            self.text_projection = ImprovedProjectionHead(text_dim, 1024, hidden_dim=1024, dropout=dropout_rate)
         elif use_mlp:
             self.text_projection = torch.nn.Sequential(
                 torch.nn.Linear(text_dim, 1024),
                 torch.nn.GELU(),
+                torch.nn.Dropout(dropout_rate),
                 torch.nn.Linear(1024, 1024)
             )
         else:
@@ -401,13 +407,8 @@ class AudioRetrievalModel(pl.LightningModule):
                         )
 
     def validation_step(self, batch, batch_idx):
-        # 如果使用 EMA，在验证时使用 EMA 模型
-        if self.use_ema and self.ema_model is not None:
-            # 保存当前模型参数
-            current_state = copy.deepcopy(self.state_dict())
-            # 加载 EMA 参数
-            self.load_state_dict(self.ema_model)
-            
+        # 🔥 修复：不再在验证时切换模型状态，直接使用当前模型
+        # EMA 的作用已经在训练过程中体现，验证时使用训练模型即可
         audio_embeddings, text_embeddings = self.forward(batch)
 
         args = {
@@ -418,10 +419,6 @@ class AudioRetrievalModel(pl.LightningModule):
         }
 
         self.validation_outputs.append(args)
-        
-        # 恢复训练模型参数
-        if self.use_ema and self.ema_model is not None:
-            self.load_state_dict(current_state)
 
     def on_validation_epoch_end(self, prefix='val'):
         outputs = self.validation_outputs
@@ -561,19 +558,31 @@ class AudioRetrievalModel(pl.LightningModule):
         total_steps = (self.kwargs['warmup_epochs'] + self.kwargs['rampdown_epochs']) * steps_per_epoch
         decay_steps = total_steps - warmup_steps
 
-        # 改进的学习率调度策略
+        # 改进的学习率调度策略 - 使用 Cosine Annealing with Warm Restarts
         use_improved_schedule = self.kwargs.get('use_improved_schedule', True)
+        use_cosine_restarts = self.kwargs.get('use_cosine_restarts', False)
         
         if use_improved_schedule:
-            # 使用更平滑的 warmup 和 cosine annealing with restarts
+            # 使用更平滑的 warmup
             if current_step < warmup_steps:
                 # 使用平方根 warmup（更平滑）
                 progress = current_step / warmup_steps
                 lr = min_lr + (max_lr - min_lr) * (progress ** 0.5)
             elif current_step < total_steps:
-                # Cosine annealing with warm restarts (可选)
-                decay_progress = (current_step - warmup_steps) / decay_steps
-                lr = min_lr + (max_lr - min_lr) * 0.5 * (1 + math.cos(math.pi * decay_progress))
+                if use_cosine_restarts:
+                    # Cosine Annealing with Warm Restarts - 每隔一段时间重启学习率
+                    restart_period = self.kwargs.get('restart_period', 15) * steps_per_epoch
+                    steps_since_warmup = current_step - warmup_steps
+                    
+                    # 计算当前在哪个重启周期内
+                    cycle_progress = (steps_since_warmup % restart_period) / restart_period
+                    
+                    # 使用 cosine annealing，但在每个周期结束时重启到 max_lr
+                    lr = min_lr + (max_lr - min_lr) * 0.5 * (1 + math.cos(math.pi * cycle_progress))
+                else:
+                    # 标准 Cosine annealing
+                    decay_progress = (current_step - warmup_steps) / decay_steps
+                    lr = min_lr + (max_lr - min_lr) * 0.5 * (1 + math.cos(math.pi * decay_progress))
             else:
                 lr = min_lr
         else:

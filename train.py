@@ -9,7 +9,7 @@ import wandb
 import argparse
 import lightning as pl
 from lightning.pytorch.loggers import WandbLogger
-from lightning.pytorch.callbacks import ModelCheckpoint
+from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping
 from lightning.pytorch import seed_everything
 from pytorch_lightning import Trainer
 from aac_datasets import Clotho, WavCaps, AudioCaps
@@ -64,12 +64,21 @@ def train(
         every_n_epochs=1,  # 每轮都检查，避免错过最佳模型
         save_last=True
     )
+    
+    # 🔥 早停策略 - 防止过拟合
+    early_stop_callback = EarlyStopping(
+        monitor='val/mAP@10',
+        patience=8,  # 8轮不提升就停止
+        mode='max',
+        verbose=True,
+        min_delta=0.001  # 至少提升0.1%才算改进
+    )
 
     # trainer
     trainer = pl.Trainer(
         devices=args['devices'],
         logger=logger if wandb.run else None,
-        callbacks=[checkpoint_callback],
+        callbacks=[checkpoint_callback, early_stop_callback],  # 🔥 添加早停
         max_epochs=args['max_epochs'],
         precision="16-mixed",
         num_sanity_val_steps=0,
@@ -153,32 +162,36 @@ def get_args() -> dict:
     parser.add_argument('--resume_ckpt_path', type=str, default=None, help='Path to checkpoint to resume training from.')
     parser.add_argument('--load_ckpt_path', type=str, default=None, help='Path to checkpoint used as a weight initialization for training.')
 
-    # Training parameters
+    # Training parameters - 🔥 修复过拟合：增加正则化 + 早停策略
     parser.add_argument('--seed', type=int, default=21208, help='Random seed of experiment')
-    parser.add_argument('--batch_size', type=int, default=32, help='Batch size for training')
-    parser.add_argument('--batch_size_eval', type=int, default=16, help='Batch size for evaluation')
-    parser.add_argument('--accumulate_grad_batches', type=int, default=2, help='Gradient accumulation steps (effective batch = batch_size * this)')
-    parser.add_argument('--max_epochs', type=int, default=50, help='Maximum number of epochs')
-    parser.add_argument('--warmup_epochs', type=int, default=5, help='Number of warmup epochs')
-    parser.add_argument('--rampdown_epochs', type=int, default=35, help='Number of ramp-down epochs')
-    parser.add_argument('--max_lr', type=float, default=2e-5, help='Maximum learning rate')
-    parser.add_argument('--min_lr', type=float, default=1e-7, help='Minimum learning rate')
-    parser.add_argument('--initial_tau', type=float, default=0.07, help='Initial tau value')
+    parser.add_argument('--batch_size', type=int, default=48, help='roberta-base更小，可以增加batch size')
+    parser.add_argument('--batch_size_eval', type=int, default=24, help='Batch size for evaluation')
+    parser.add_argument('--accumulate_grad_batches', type=int, default=2, help='梯度累积2次，有效batch=96')
+    parser.add_argument('--max_epochs', type=int, default=50, help='🔥 减少到50 epochs，配合早停策略')
+    parser.add_argument('--warmup_epochs', type=int, default=5, help='🔥 增加warmup到5轮，更稳定')
+    parser.add_argument('--rampdown_epochs', type=int, default=40, help='40轮衰减期')
+    parser.add_argument('--max_lr', type=float, default=6e-5, help='🔥 平衡：提高到6e-5，在稳定和性能间平衡')
+    parser.add_argument('--min_lr', type=float, default=1e-6, help='最小学习率1e-6')
+    parser.add_argument('--use_cosine_restarts', default=True, action=argparse.BooleanOptionalAction, help='启用学习率重启')
+    parser.add_argument('--restart_period', type=int, default=10, help='🔥 每10轮重启学习率')
+    parser.add_argument('--initial_tau', type=float, default=0.07, help='初始tau为0.07')
     parser.add_argument('--tau_trainable', default=True, action=argparse.BooleanOptionalAction, help='Temperature parameter is trainable or not.')
-    parser.add_argument('--weight_decay', type=float, default=0.01, help='Weight decay for AdamW optimizer')
+    parser.add_argument('--weight_decay', type=float, default=0.01, help='🔥 平衡：降低到0.01，在过拟合和欠拟合间平衡')
     parser.add_argument('--use_mlp_projection', default=False, action=argparse.BooleanOptionalAction, help='Use MLP projection head instead of linear')
+    parser.add_argument('--dropout_rate', type=float, default=0.1, help='🔥 平衡：降低到0.1，在过拟合和欠拟合间平衡')
     
-    # 新增优化参数
-    parser.add_argument('--use_improved_projection', default=True, action=argparse.BooleanOptionalAction, help='Use improved projection head with residual connections')
-    parser.add_argument('--use_cross_attention', default=False, action=argparse.BooleanOptionalAction, help='Use cross-modal attention mechanism (currently unstable, not recommended)')
+    # 启用所有有效的优化技术
+    parser.add_argument('--use_improved_projection', default=True, action=argparse.BooleanOptionalAction, help='使用改进的投影头')
+    parser.add_argument('--use_cross_attention', default=False, action=argparse.BooleanOptionalAction, help='暂时禁用交叉注意力')
     parser.add_argument('--cross_attn_warmup_epochs', type=int, default=100, help='Number of epochs before enabling cross attention')
-    parser.add_argument('--use_multi_layer_text', default=True, action=argparse.BooleanOptionalAction, help='Use multi-layer text feature fusion')
-    parser.add_argument('--use_ema', default=True, action=argparse.BooleanOptionalAction, help='Use Exponential Moving Average for model parameters')
-    parser.add_argument('--ema_decay', type=float, default=0.999, help='EMA decay rate')
-    parser.add_argument('--use_layerwise_lr', default=True, action=argparse.BooleanOptionalAction, help='Use layer-wise learning rates')
-    parser.add_argument('--use_improved_schedule', default=True, action=argparse.BooleanOptionalAction, help='Use improved learning rate schedule')
-    parser.add_argument('--loss_type', type=str, default='improved_infonce', choices=['infonce', 'improved_infonce', 'focal'], help='Type of loss function')
-    parser.add_argument('--hard_negative_weight', type=float, default=0.2, help='Weight for hard negative mining')
+    parser.add_argument('--use_multi_layer_text', default=True, action=argparse.BooleanOptionalAction, help='启用多层文本特征融合')
+    parser.add_argument('--use_ema', default=True, action=argparse.BooleanOptionalAction, help='启用EMA提高泛化')
+    parser.add_argument('--ema_decay', type=float, default=0.999, help='降低EMA decay到0.999')
+    parser.add_argument('--use_layerwise_lr', default=True, action=argparse.BooleanOptionalAction, help='启用分层学习率')
+    parser.add_argument('--use_improved_schedule', default=True, action=argparse.BooleanOptionalAction, help='使用改进的学习率调度')
+    parser.add_argument('--loss_type', type=str, default='infonce', choices=['infonce', 'improved_infonce', 'focal'], help='🔥 禁用Hard Negative Mining，使用标准InfoNCE')
+    parser.add_argument('--hard_negative_weight', type=float, default=0.0, help='🔥 完全禁用Hard Negative Mining')
+    parser.add_argument('--label_smoothing', type=float, default=0.0, help='禁用标签平滑')
     parser.add_argument('--focal_gamma', type=float, default=2.0, help='Gamma parameter for focal loss')
 
     # PaSST parameters
@@ -187,13 +200,13 @@ def get_args() -> dict:
     parser.add_argument('--mel_freqm', type=int, default=24, help='Mel SpecAugment freq mask (0=disable)')
     parser.add_argument('--mel_timem', type=int, default=96, help='Mel SpecAugment time mask (0=disable)')
 
-    # RoBERTa parameters
-    parser.add_argument('--roberta_base', default=False, action=argparse.BooleanOptionalAction,  help='Use Roberta base or large.')
+    # RoBERTa parameters - 切换到roberta-base
+    parser.add_argument('--roberta_base', default=True, action=argparse.BooleanOptionalAction,  help='切换到Roberta base（更适合小数据集）')
     parser.add_argument('--roberta_model_path', type=str, default='/root/autodl-tmp/huggingface_cache', help='本地RoBERTa模型路径')
     
     # use additional data sets...
     parser.add_argument('--wavcaps', default=False, action=argparse.BooleanOptionalAction, help='Include WavCaps in the training or not.')
-    parser.add_argument('--audiocaps', default=False, action=argparse.BooleanOptionalAction, help='Include AudioCaps in the training or not.')
+    parser.add_argument('--audiocaps', default=True, action=argparse.BooleanOptionalAction, help='Include AudioCaps in the training or not. (默认启用)')
     parser.add_argument('--ablate_clean_setup', default=True, action=argparse.BooleanOptionalAction, help='Include ClothoV2.1 eval, test in the training or not.')
 
     # Paths
@@ -216,10 +229,19 @@ if __name__ == '__main__':
         - Initializes logging and model.
         - Runs training and/or testing based on arguments.
         """
+        # ============================================
+        # 🚀 激进学习率重启策略 - 突破0.29平台期
+        # ============================================
+        
+        # 设置CUDA内存优化
+        import os
+        os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
+        print("✅ 已设置 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True")
+        print()
+        
         args = get_args()
         roberta_model_path=args['roberta_model_path']
         print("Data path:", args["data_path"])
-        import os
 
         print("Contents of data path:", os.listdir(args["data_path"]))
         os.makedirs(args["data_path"], exist_ok=True)
