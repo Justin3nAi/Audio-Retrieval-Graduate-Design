@@ -78,7 +78,7 @@ def main():
     parser.add_argument(
         "--filename",
         type=str,
-        default="model.ckpt",
+        default="mAP@10=0.32.ckpt",
         help="Model filename"
     )
     parser.add_argument(
