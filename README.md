@@ -203,10 +203,10 @@ If you use this code in your research, please cite:
 
 ```bibtex
 @misc{Audio-Retrieval-Graduate-Design-2026,
-  author = {Yuanzhi Zhu},
+  author = {Justin},
   title = {Multi-Encoder Audio-Text Retrieval System},
   year = {2026},
-  publisher = {GitHub},
+  publisher = {Justin3nAi},
   url = {https://github.com/Justin3nAi/Audio-Retrieval-Graduate-Design}
 }
 ```
@@ -221,12 +221,6 @@ This project builds upon:
 - [CLAP](https://github.com/LAION-AI/CLAP) - Contrastive Language-Audio Pretraining
 - [Clotho](https://zenodo.org/record/3490684) - Audio captioning dataset
 - [AudioCaps](https://audiocaps.github.io/) - Audio captioning dataset
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 

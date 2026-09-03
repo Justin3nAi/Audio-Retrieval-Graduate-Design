@@ -202,10 +202,10 @@ python train.py \
 
 ```bibtex
 @misc{audio-text-retrieval-2026,
-  author = {Yuanzhi Zhu},
+  author = {Justin},
   title = {Multi-Encoder Audio-Text Retrieval System},
   year = {2026},
-  publisher = {GitHub},
+  publisher = {Justin3nAi},
   url = {https://github.com/Justin3nAi/Audio-Retrieval-Graduate-Design}
 }
 ```
@@ -221,13 +221,7 @@ python train.py \
 - [Clotho](https://zenodo.org/record/3490684) - 音频描述数据集
 - [AudioCaps](https://audiocaps.github.io/) - 音频描述数据集
 
----
 
-## 📄 许可证
-
-本项目采用MIT许可证 - 详见 [LICENSE](LICENSE) 文件
-
----
 
 ## 🐛 问题和贡献
 
@@ -253,4 +247,4 @@ python train.py \
 ---
 
 **最后更新**: 2026年3月  
-**状态**: 活跃开发中
+**状态**: 开发中
