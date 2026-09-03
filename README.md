@@ -6,6 +6,8 @@ A retrieval-based audio-text matching system combining PaSST and CLAP encoders w
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg)](https://pytorch.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+English | [简体中文](README_CN.md)
+
 ---
 
 ## 🚀 Quick Start
