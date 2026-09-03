@@ -242,7 +242,7 @@ python train.py \
 如有问题或讨论：
 
 - **GitHub Issues**: [项目Issues](https://github.com/Justin3nAi/Audio-Retrieval-Graduate-Design/issues)
-- **Email**: 1628575421@qq.com
+- **Email**: zhuyuanzhi09@126.com
 
 ---
 

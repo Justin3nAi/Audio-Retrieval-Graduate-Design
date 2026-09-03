@@ -243,7 +243,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 For questions or discussions:
 
 - **GitHub Issues**: [Project Issues](https://github.com/Justin3nAi/Audio-Retrieval-Graduate-Design/issues)
-- **Email**: 1628575421@qq.com
+- **Email**: zhuyuanzhi09@126.com
 
 ---
 
