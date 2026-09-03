@@ -1,0 +1,29 @@
+# Core dependencies
+torch>=2.0.0
+torchaudio>=2.0.0
+lightning>=2.0.0
+
+# Audio processing
+librosa>=0.10.0
+soundfile>=0.12.0
+
+# NLP and transformers
+transformers>=4.30.0
+tokenizers>=0.13.0
+
+# Pre-trained models
+hear21passt  # PaSST model
+aac-datasets  # CLAP model (laion/clap-htsat-fused)
+
+# Web application
+gradio>=4.0.0
+
+# Data processing
+numpy>=1.24.0
+pandas>=2.0.0
+
+# HuggingFace Hub
+huggingface-hub>=0.16.0
+
+# Optional: for faster audio loading
+# ffmpeg-python>=0.2.0

@@ -1,217 +1,294 @@
-# 🚀 快速启动指南
+# 🚀 三编码器训练快速启动指南
 
-## ✅ 问题已修复
+## ✅ 当前配置（已内置到train.py）
 
-**之前的问题**: 训练到第10轮后，所有指标开始下降（过拟合）
+### 🎯 编码器配置
+```python
+use_multi_encoder = True      # 启用多编码器融合
+use_passt = True              # 启用PaSST
+use_beats = True              # 启用BEATs（已修复NaN问题）
+use_clap = True               # 启用CLAP
+fusion_type = 'attention'     # 注意力融合
+```
 
-**根本原因**: 
-1. Hard Negative Mining 导致过拟合
-2. 正则化不足
-3. 缺少早停机制
-4. EMA 验证逻辑错误
+### 📊 训练参数
+```python
+batch_size = 32               # 32GB显存优化
+accumulate_grad_batches = 2   # 等效batch=64
+max_epochs = 40
+max_lr = 1.5e-5              # 降低学习率，防止过拟合
+warmup_epochs = 1
+rampdown_epochs = 20         # 延长衰减周期
+```
 
-**修复状态**: ✅ 所有问题已修复
+### 🛡️ 正则化（防止过拟合）
+```python
+dropout_rate = 0.3           # 增强dropout
+weight_decay = 0.01          # L2正则化
+early_stopping = 8           # 早停patience
+```
+
+### 🎨 优化开关
+```python
+use_mlp_projection = True         # MLP投影头
+use_improved_projection = True    # 改进投影头
+use_attention_pooling = True      # 注意力池化
+use_attentive_aggregation = False # 禁用（保持简单）
+use_cross_attention = False       # 禁用（避免过拟合）
+```
+
+### 📁 数据集
+```python
+audiocaps = True             # 使用AudioCaps增强数据
+wavcaps = False              # 不使用WavCaps
+总计: 67,743 样本 (+253%)
+```
 
 ---
 
-## 🎯 立即开始训练
+## 🚀 启动训练（一键启动）
 
-### 步骤1: 启动训练
-
+### 1. 上传修复后的文件
 ```bash
-cd C:\Users\16285\.cursor\worktrees\d25_t6\tir
-python train.py
+cd D:\GraduateDesign\Test\dcase2025_task6_baseline\ServerCodes\TestVersion\d25_t6
+
+# 上传修复后的multi_audio_encoder.py（BEATs修复）
+scp multi_audio_encoder.py root@your-server:/root/autodl-tmp/ProjectAR/d25_t6/
+
+# 上传train.py（参数已配置好）
+scp train.py root@your-server:/root/autodl-tmp/ProjectAR/d25_t6/
 ```
 
-就这么简单！所有修复已设置为默认值。
-
-### 步骤2: 监控训练
-
-打开 W&B 监控页面，关注以下指标：
-
-#### 主要指标
-- **val/mAP@10**: 应该持续上升，不应该下降
-- **val/R@5**: 应该持续上升
-- **val/R@10**: 应该持续上升
-
-#### 辅助指标
-- **train/loss**: 应该平稳下降
-- **train/lr**: 应该看到每10轮的重启（锯齿状）
-
-### 步骤3: 关键检查点
-
-| Epoch | 检查内容 | 预期结果 |
-|-------|---------|---------|
-| 5 | Warmup 完成 | mAP ≈ 0.24 |
-| 10 | 第一次重启 | mAP ≈ 0.28，**不应该下降** ✅ |
-| 15 | 持续上升 | mAP ≈ 0.30，突破0.30 🎉 |
-| 20 | 持续上升 | mAP ≈ 0.32 |
-| 25-30 | 接近目标 | mAP ≈ 0.34-0.35 🎯 |
-
----
-
-## 🔍 如何判断训练是否正常
-
-### ✅ 正常训练的标志
-
-1. **验证指标持续上升或平稳**
-   - val/mAP@10 不应该出现明显下降
-   - 可能会有小幅波动（±0.01），这是正常的
-
-2. **训练loss平稳下降**
-   - 不应该出现突然的跳跃
-   - 应该逐渐收敛
-
-3. **学习率重启有效**
-   - 每10轮看到学习率重启
-   - 重启后验证指标有小幅提升
-
-### ⚠️ 仍在过拟合的标志
-
-1. **验证指标在某个epoch后持续下降**
-   - 例如：Epoch 10 后 mAP 从 0.28 降到 0.26
-   - 这说明仍然过拟合
-
-2. **训练loss下降但验证指标不涨**
-   - train/loss 持续下降
-   - val/mAP@10 不涨反降
-
-3. **验证指标波动很大**
-   - 例如：0.28 → 0.25 → 0.29 → 0.24
-   - 说明训练不稳定
-
----
-
-## 🛠️ 如果仍然过拟合
-
-### 方案A: 进一步增加正则化
-
-停止当前训练，运行：
-
+### 2. 启动训练（使用默认参数）
 ```bash
-python train.py \
-  --weight_decay 0.03 \
-  --dropout_rate 0.2
+ssh root@your-server
+cd /root
+python -m d25_t6.train
 ```
 
-### 方案B: 减小学习率
+**就这么简单！** 所有参数都已经配置好了，直接运行即可！
 
+---
+
+## 📊 预期性能
+
+| 配置 | mAP@10 | 提升 |
+|------|--------|------|
+| 仅PaSST（基线） | 0.29 | - |
+| PaSST + CLAP | 0.315 | +8.6% |
+| **PaSST + BEATs + CLAP** | **0.33-0.35** | **+14-21%** |
+
+---
+
+## 🔍 训练监控
+
+### 关键指标
+1. **val/mAP@10**: 主要评估指标（目标 > 0.33）
+2. **val/R@10**: 辅助指标
+3. **train/loss**: 训练损失
+
+### 成功的标志
+- ✅ 没有"BEATs特征包含NaN"错误
+- ✅ val/mAP@10 稳定上升
+- ✅ 显存使用 ~22-26GB（正常）
+- ✅ 训练稳定，无崩溃
+
+### 预期训练曲线
+```
+Epoch 0-5:   快速上升，mAP@10 = 0.26-0.29
+Epoch 5-15:  稳定提升，mAP@10 = 0.29-0.32
+Epoch 15-25: 缓慢提升，mAP@10 = 0.32-0.34
+Epoch 25-35: 达到峰值，mAP@10 = 0.33-0.35
+Epoch 35+:   早停触发，保存最佳模型
+```
+
+---
+
+## 🎯 如果需要调整参数
+
+虽然默认参数已经优化好了，但如果需要调整，可以使用命令行参数：
+
+### 调整batch size（如果显存不足）
 ```bash
-python train.py \
-  --max_lr 3e-5 \
-  --weight_decay 0.03
+python -m d25_t6.train --batch_size 24 --accumulate_grad_batches 3
 ```
 
-### 方案C: 添加 WavCaps 数据集
-
-这将增加 ~400K 样本，大幅降低过拟合风险：
-
+### 禁用某个编码器（测试用）
 ```bash
-python train.py --wavcaps
+# 只用PaSST + CLAP（禁用BEATs）
+python -m d25_t6.train --no-use_beats
+
+# 只用PaSST + BEATs（禁用CLAP）
+python -m d25_t6.train --no-use_clap
+
+# 只用PaSST（基线）
+python -m d25_t6.train --no-use_multi_encoder
 ```
 
-**注意**: 需要先下载 WavCaps 数据集
-
----
-
-## 📊 预期训练时间
-
-### 硬件配置
-- GPU: 假设使用 V100 或 A100
-- Batch size: 48
-- 梯度累积: 2 (有效batch=96)
-
-### 时间估算
-- 每个epoch: ~15-20分钟
-- 预计总轮数: 30-40 epochs（早停）
-- **总训练时间**: 8-12 小时
-
-### 早停触发
-- 如果8轮内验证指标不提升，训练会自动停止
-- 最佳模型会自动保存
-
----
-
-## 🎉 成功标准
-
-### 短期目标（Epoch 15）
-- ✅ val/mAP@10 突破 0.30
-- ✅ 验证指标不再下降
-
-### 中期目标（Epoch 25）
-- ✅ val/mAP@10 达到 0.32-0.33
-
-### 最终目标（Epoch 30-40）
-- ✅ val/mAP@10 达到 0.34-0.35
-- ✅ 早停触发，保存最佳模型
-
----
-
-## 📝 训练日志示例
-
-### 正常训练的日志
-
-```
-Epoch 5:  train/loss=1.234, val/mAP@10=0.2401, val/R@5=0.3812
-Epoch 10: train/loss=1.156, val/mAP@10=0.2789, val/R@5=0.4123  ← 第一次重启
-Epoch 15: train/loss=1.089, val/mAP@10=0.3012, val/R@5=0.4356  ← 突破0.30 🎉
-Epoch 20: train/loss=1.034, val/mAP@10=0.3198, val/R@5=0.4512  ← 第二次重启
-Epoch 25: train/loss=0.989, val/mAP@10=0.3334, val/R@5=0.4623
-Epoch 30: train/loss=0.956, val/mAP@10=0.3456, val/R@5=0.4701  ← 第三次重启
-Epoch 35: train/loss=0.934, val/mAP@10=0.3489, val/R@5=0.4734
-Epoch 38: Early stopping triggered! Best mAP@10=0.3489 at epoch 35
-```
-
-### 过拟合的日志（需要修复）
-
-```
-Epoch 5:  train/loss=1.234, val/mAP@10=0.2401
-Epoch 10: train/loss=1.156, val/mAP@10=0.2904  ← 峰值
-Epoch 15: train/loss=1.089, val/mAP@10=0.2712  ← 开始下降 ⚠️
-Epoch 20: train/loss=1.034, val/mAP@10=0.2534  ← 持续下降 ⚠️
-```
-
----
-
-## 💡 常见问题
-
-### Q1: 训练多久能看到效果？
-**A**: 前5轮是warmup，第10轮是关键检查点。如果第10轮后验证指标不下降，说明修复有效。
-
-### Q2: 如果第10轮后还是下降怎么办？
-**A**: 立即停止训练，使用"方案A"进一步增加正则化。
-
-### Q3: 需要手动停止训练吗？
-**A**: 不需要，早停机制会自动停止训练并保存最佳模型。
-
-### Q4: 最佳模型保存在哪里？
-**A**: `checkpoints/<experiment_name>/best-*.ckpt`
-
-### Q5: 如何使用最佳模型进行测试？
-**A**: 训练结束后会自动使用最佳模型进行测试（如果启用了 `--test`）
-
----
-
-## 🔗 相关文档
-
-- **完整修复指南**: `COMPLETE_FIX_GUIDE.md`
-- **问题诊断**: `CRITICAL_FIX_OVERFITTING.md`
-- **文档索引**: `INDEX.md`
-
----
-
-## 🚀 现在就开始！
-
+### 调整学习率
 ```bash
-python train.py
+python -m d25_t6.train --max_lr 2e-5
 ```
 
-然后打开 W&B 监控页面，观察训练曲线。
-
-**祝训练顺利！目标：mAP@10 达到 0.34-0.35！** 🎯
+### 调整dropout
+```bash
+python -m d25_t6.train --dropout_rate 0.4
+```
 
 ---
 
-*创建时间: 2026-02-04*
-*状态: ✅ 已修复过拟合问题*
+## 📋 完整参数列表
 
+### 编码器参数
+```python
+--use_multi_encoder          # 启用多编码器（默认True）
+--use_passt                  # 启用PaSST（默认True）
+--use_beats                  # 启用BEATs（默认True）
+--use_clap                   # 启用CLAP（默认True）
+--fusion_type attention      # 融合策略（默认attention）
+--beats_model_path /root/autodl-tmp/teacher_models/beats/BEATs_iter3_plus_AS2M.pt
+--clap_model_name /root/autodl-tmp/teacher_models/clap/clap-htsat-unfused
+```
+
+### 训练参数
+```python
+--batch_size 32              # Batch size（默认32）
+--accumulate_grad_batches 2  # 梯度累积（默认2）
+--max_epochs 40              # 最大epoch（默认40）
+--max_lr 1.5e-5             # 最大学习率（默认1.5e-5）
+--warmup_epochs 1            # Warmup轮数（默认1）
+--rampdown_epochs 20         # 衰减轮数（默认20）
+```
+
+### 正则化参数
+```python
+--dropout_rate 0.3           # Dropout率（默认0.3）
+--weight_decay 0.01          # 权重衰减（默认0.01）
+```
+
+### 优化参数
+```python
+--use_mlp_projection         # MLP投影头（默认True）
+--use_improved_projection    # 改进投影头（默认True）
+--use_attention_pooling      # 注意力池化（默认True）
+```
+
+### 数据参数
+```python
+--audiocaps                  # 使用AudioCaps（默认True）
+--no-wavcaps                 # 不使用WavCaps（默认False）
+```
+
+---
+
+## 🔧 BEATs修复说明
+
+### 已修复的问题
+1. ✅ 预先创建重采样器（避免重复创建）
+2. ✅ 输入NaN/Inf检查和归一化
+3. ✅ Padding到固定长度（160000 @ 16kHz）
+4. ✅ 输出NaN/Inf检查
+5. ✅ 异常处理和fallback
+6. ✅ 梯度隔离（no_grad）
+
+### 如果BEATs仍有问题
+```bash
+# 临时禁用BEATs，使用双编码器
+python -m d25_t6.train --no-use_beats
+```
+
+---
+
+## 💡 训练技巧
+
+### 1. 监控显存使用
+```bash
+# 在另一个终端监控GPU
+watch -n 1 nvidia-smi
+```
+
+### 2. 查看训练日志
+```bash
+# 实时查看日志
+tail -f nohup.out
+```
+
+### 3. 后台运行（推荐）
+```bash
+nohup python -m d25_t6.train > train.log 2>&1 &
+
+# 查看日志
+tail -f train.log
+```
+
+### 4. 使用tmux（推荐）
+```bash
+# 创建新会话
+tmux new -s train
+
+# 启动训练
+python -m d25_t6.train
+
+# 分离会话：Ctrl+B, 然后按D
+# 重新连接：tmux attach -t train
+```
+
+---
+
+## 📊 性能对比
+
+### 编码器组合对比
+| 编码器 | 特征维度 | 特点 | mAP@10 |
+|--------|---------|------|--------|
+| PaSST | 768 | Transformer，全局建模 | 0.29 |
+| PaSST + CLAP | 768+512 | +对比学习 | 0.315 |
+| **PaSST + BEATs + CLAP** | **768+768+512** | **+自监督语义** | **0.33-0.35** |
+
+### 融合策略对比
+| 策略 | 描述 | 性能 |
+|------|------|------|
+| Concat | 简单拼接 | 中等 |
+| Weighted | 学习权重 | 较好 |
+| **Attention** | **动态权重** | **最好** |
+
+---
+
+## ✅ 检查清单
+
+启动训练前确认：
+
+- [ ] 已上传 `multi_audio_encoder.py`（BEATs修复）
+- [ ] 已上传 `train.py`（参数配置）
+- [ ] BEATs模型文件存在：`/root/autodl-tmp/teacher_models/beats/BEATs_iter3_plus_AS2M.pt`
+- [ ] CLAP模型文件存在：`/root/autodl-tmp/teacher_models/clap/clap-htsat-unfused`
+- [ ] 数据集已准备好：Clotho + AudioCaps
+- [ ] 显存充足：32GB
+- [ ] 已设置CUDA环境变量（train.py中已自动设置）
+
+---
+
+## 🎉 总结
+
+### 一键启动命令
+```bash
+# 上传文件
+cd D:\GraduateDesign\Test\dcase2025_task6_baseline\ServerCodes\TestVersion\d25_t6
+scp multi_audio_encoder.py train.py root@your-server:/root/autodl-tmp/ProjectAR/d25_t6/
+
+# 启动训练
+ssh root@your-server
+cd /root
+python -m d25_t6.train
+```
+
+### 预期结果
+- **性能**: mAP@10 = 0.33-0.35
+- **提升**: +14-21%（从0.29基线）
+- **训练时间**: 25-35 epochs（早停）
+- **显存使用**: ~22-26GB
+
+---
+
+**准备好了！直接运行 `python -m d25_t6.train` 即可！** 🚀
+
+所有参数都已经优化配置好，无需额外设置！

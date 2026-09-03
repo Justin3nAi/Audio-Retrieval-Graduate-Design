@@ -54,24 +54,24 @@ def train(
     checkpoint_dir = os.path.join(args["checkpoints_path"], experiment_name)
     os.makedirs(checkpoint_dir, exist_ok=True)  # Ensure directory exists
 
-    # checkpoint callback - 每轮验证并保存最佳模型
+    # checkpoint callback - 🔥 回到基线：每5轮验证并保存
     checkpoint_callback = ModelCheckpoint(
         dirpath=str(checkpoint_dir),
         filename="best-{epoch}-{val/mAP@10:.2f}",
         save_top_k=1,
         monitor="val/mAP@10",
         mode="max",
-        every_n_epochs=1,  # 每轮都检查，避免错过最佳模型
+        every_n_epochs=5,  # 🔥 回到基线：每5轮
         save_last=True
     )
     
     # 🔥 早停策略 - 防止过拟合
     early_stop_callback = EarlyStopping(
         monitor='val/mAP@10',
-        patience=8,  # 8轮不提升就停止
+        patience=8,  # 8个验证周期（40个epoch）没有提升就停止
         mode='max',
         verbose=True,
-        min_delta=0.001  # 至少提升0.1%才算改进
+        min_delta=0.001  # 至少提升0.001才算改进
     )
 
     # trainer
@@ -82,10 +82,10 @@ def train(
         max_epochs=args['max_epochs'],
         precision="16-mixed",
         num_sanity_val_steps=0,
-        check_val_every_n_epoch=1,  # 每轮验证，更好监控训练
+        check_val_every_n_epoch=5,  # 🔥 回到基线：每5轮验证
         fast_dev_run=False,
         gradient_clip_val=1.0,  # 梯度裁剪，稳定训练
-        accumulate_grad_batches=args.get('accumulate_grad_batches', 1)  # 梯度累积，增大有效 batch
+        accumulate_grad_batches=args.get('accumulate_grad_batches', 1)
     )
 
     ### train on training set; monitor performance on val
@@ -160,53 +160,135 @@ def get_args() -> dict:
 
     # Parameter initialization & resume training
     parser.add_argument('--resume_ckpt_path', type=str, default=None, help='Path to checkpoint to resume training from.')
-    parser.add_argument('--load_ckpt_path', type=str, default=None, help='Path to checkpoint used as a weight initialization for training.')
+    parser.add_argument('--load_ckpt_path', type=str, default='/root/autodl-tmp/ProjectAR/teacher_checkpoints/best_checkpoint/mAP@10=0.32.ckpt', help='Path to checkpoint used as a weight initialization for training.')
 
-    # Training parameters - 🔥 修复过拟合：增加正则化 + 早停策略
+    # Training parameters - 🔥 回归简单有效的配置（参考0.301基线）
     parser.add_argument('--seed', type=int, default=21208, help='Random seed of experiment')
-    parser.add_argument('--batch_size', type=int, default=48, help='roberta-base更小，可以增加batch size')
-    parser.add_argument('--batch_size_eval', type=int, default=24, help='Batch size for evaluation')
-    parser.add_argument('--accumulate_grad_batches', type=int, default=2, help='梯度累积2次，有效batch=96')
-    parser.add_argument('--max_epochs', type=int, default=50, help='🔥 减少到50 epochs，配合早停策略')
-    parser.add_argument('--warmup_epochs', type=int, default=5, help='🔥 增加warmup到5轮，更稳定')
-    parser.add_argument('--rampdown_epochs', type=int, default=40, help='40轮衰减期')
-    parser.add_argument('--max_lr', type=float, default=6e-5, help='🔥 平衡：提高到6e-5，在稳定和性能间平衡')
-    parser.add_argument('--min_lr', type=float, default=1e-6, help='最小学习率1e-6')
-    parser.add_argument('--use_cosine_restarts', default=True, action=argparse.BooleanOptionalAction, help='启用学习率重启')
-    parser.add_argument('--restart_period', type=int, default=10, help='🔥 每10轮重启学习率')
-    parser.add_argument('--initial_tau', type=float, default=0.07, help='初始tau为0.07')
-    parser.add_argument('--tau_trainable', default=True, action=argparse.BooleanOptionalAction, help='Temperature parameter is trainable or not.')
-    parser.add_argument('--weight_decay', type=float, default=0.01, help='🔥 平衡：降低到0.01，在过拟合和欠拟合间平衡')
-    parser.add_argument('--use_mlp_projection', default=False, action=argparse.BooleanOptionalAction, help='Use MLP projection head instead of linear')
-    parser.add_argument('--dropout_rate', type=float, default=0.1, help='🔥 平衡：降低到0.1，在过拟合和欠拟合间平衡')
+    parser.add_argument('--batch_size', type=int, default=32, help='Batch size matching best baseline')
+    parser.add_argument('--batch_size_eval', type=int, default=32, help='Batch size for evaluation (can be larger)')
+    parser.add_argument('--accumulate_grad_batches', type=int, default=2, help='Gradient accumulation, effective batch=64')
+    parser.add_argument('--max_epochs', type=int, default=25, help='Fine-tune epochs')
+    parser.add_argument('--warmup_epochs', type=int, default=0, help='No warmup needed for fine-tuning')
+    parser.add_argument('--rampdown_epochs', type=int, default=20, help='Long rampdown for fine-tuning')
+    parser.add_argument('--max_lr', type=float, default=5e-6, help='Fine-tune learning rate (1/4 of baseline)')
+    parser.add_argument('--min_lr', type=float, default=1e-8, help='Minimum learning rate')
+    parser.add_argument('--use_cosine_restarts', default=False, action=argparse.BooleanOptionalAction, help='Disable learning rate restarts')
+    parser.add_argument('--restart_period', type=int, default=15, help='Learning rate restart period (disabled)')
+    parser.add_argument('--initial_tau', type=float, default=0.05, help='Initial tau value')
+    parser.add_argument('--tau_trainable', default=False, action=argparse.BooleanOptionalAction, help='Tau not trainable')
+    parser.add_argument('--weight_decay', type=float, default=0.0, help='Weight decay')
+    parser.add_argument('--use_mlp_projection', default=True, action=argparse.BooleanOptionalAction, help='🔥 使用MLP投影头，提升表达能力')
+    parser.add_argument('--dropout_rate', type=float, default=0.2, help='🔥 增加dropout到0.3防止过拟合')
     
-    # 启用所有有效的优化技术
-    parser.add_argument('--use_improved_projection', default=True, action=argparse.BooleanOptionalAction, help='使用改进的投影头')
-    parser.add_argument('--use_cross_attention', default=False, action=argparse.BooleanOptionalAction, help='暂时禁用交叉注意力')
+    # 🔥 启用有效的优化
+    parser.add_argument('--use_improved_projection', default=True, action=argparse.BooleanOptionalAction, help='🔥 启用改进投影头')
+    parser.add_argument('--use_attentive_aggregation', default=False, action=argparse.BooleanOptionalAction, help='🔥 禁用注意力聚合，使用简单平均')
+    parser.add_argument('--use_attention_pooling', default=True, action=argparse.BooleanOptionalAction, help='🔥 启用注意力池化')
+    parser.add_argument('--use_cross_attention', default=False, action=argparse.BooleanOptionalAction, help='禁用交叉注意力')
     parser.add_argument('--cross_attn_warmup_epochs', type=int, default=100, help='Number of epochs before enabling cross attention')
-    parser.add_argument('--use_multi_layer_text', default=True, action=argparse.BooleanOptionalAction, help='启用多层文本特征融合')
-    parser.add_argument('--use_ema', default=True, action=argparse.BooleanOptionalAction, help='启用EMA提高泛化')
-    parser.add_argument('--ema_decay', type=float, default=0.999, help='降低EMA decay到0.999')
-    parser.add_argument('--use_layerwise_lr', default=True, action=argparse.BooleanOptionalAction, help='启用分层学习率')
-    parser.add_argument('--use_improved_schedule', default=True, action=argparse.BooleanOptionalAction, help='使用改进的学习率调度')
-    parser.add_argument('--loss_type', type=str, default='infonce', choices=['infonce', 'improved_infonce', 'focal'], help='🔥 禁用Hard Negative Mining，使用标准InfoNCE')
-    parser.add_argument('--hard_negative_weight', type=float, default=0.0, help='🔥 完全禁用Hard Negative Mining')
+    parser.add_argument('--use_multi_layer_text', default=False, action=argparse.BooleanOptionalAction, help='🔥 禁用多层融合，使用单层[CLS]')
+    parser.add_argument('--use_ema', default=False, action=argparse.BooleanOptionalAction, help='🔥 禁用EMA，保持简单')
+    parser.add_argument('--ema_decay', type=float, default=0.999, help='EMA decay（已禁用）')
+    parser.add_argument('--use_layerwise_lr', default=False, action=argparse.BooleanOptionalAction, help='🔥 禁用分层学习率')
+    parser.add_argument('--use_improved_schedule', default=False, action=argparse.BooleanOptionalAction, help='🔥 使用标准学习率调度')
+    parser.add_argument('--loss_type', type=str, default='infonce', choices=['infonce', 'improved_infonce', 'focal'], help='🔥 使用标准InfoNCE（最稳定）')
+    parser.add_argument('--hard_negative_weight', type=float, default=0.0, help='🔥 禁用Hard Negative Mining')
     parser.add_argument('--label_smoothing', type=float, default=0.0, help='禁用标签平滑')
     parser.add_argument('--focal_gamma', type=float, default=2.0, help='Gamma parameter for focal loss')
+    
+    # 🔥 知识蒸馏参数（Kim论文核心技术，+4.3% mAP）
+    parser.add_argument('--use_ensemble_distillation', default=True, action=argparse.BooleanOptionalAction,
+                        help='启用集成知识蒸馏（Kim论文）')
+    parser.add_argument('--use_pretrained_teachers', default=False, action=argparse.BooleanOptionalAction,
+                        help='使用预训练模型作为教师（CLAP）')
+    parser.add_argument('--teacher_checkpoints', type=str, nargs='+',
+                        default=[
+                            '/root/autodl-tmp/ProjectAR/teacher_checkpoints/teacher1_passt_only/last.ckpt',
+                            '/root/autodl-tmp/ProjectAR/teacher_checkpoints/teacher2_passt_clap/mAP@10=0.32.ckpt'
+                        ],
+                        help='已训练的教师模型checkpoint路径（Kim论文方法）')
+    parser.add_argument('--ensemble_distill_temperature', type=float, default=1.0,
+                        help='蒸馏温度（Kim论文使用1.0）')
+    parser.add_argument('--ensemble_distill_weight', type=float, default=1.0,
+                        help='蒸馏损失权重（Kim论文λ1=1.0）')
+    
+    # 🔥 数据增强参数（高性价比优化，+3-5% mAP）
+    parser.add_argument('--use_augmentation', default=True, action=argparse.BooleanOptionalAction,
+                        help='启用数据增强（SpecAugment + Mixup）')
+    parser.add_argument('--use_mixup', default=True, action=argparse.BooleanOptionalAction,
+                        help='启用 Mixup 音频混合')
+    
+    # 🔥 改进损失函数参数（高性价比优化，+2-3% mAP）
+    parser.add_argument('--use_improved_loss', default=True, action=argparse.BooleanOptionalAction,
+                        help='启用改进损失函数（Focal Loss + Hard Negative Mining）')
+    
+    # 🔥 禁用所有其他蒸馏，只用Kim的方法
+    parser.add_argument('--use_online_distillation', default=False, action=argparse.BooleanOptionalAction, help='🔥 禁用在线蒸馏')
+    parser.add_argument('--distill_temperature', type=float, default=2.0, help='蒸馏温度（已禁用）')
+    parser.add_argument('--distill_alpha', type=float, default=0.5, help='在线蒸馏权重（已禁用）')
+    
+    # 🔥 禁用聚类分类
+    parser.add_argument('--use_clustering_classification', default=False, action=argparse.BooleanOptionalAction, help='🔥 禁用聚类分类')
+    parser.add_argument('--num_clusters', type=int, default=50, help='聚类数量（已禁用）')
+    parser.add_argument('--clustering_weight', type=float, default=0.05, help='聚类损失权重（已禁用）')
+    
+    # 🔥 禁用AudioCLIP蒸馏
+    parser.add_argument('--use_audioclip_distillation', default=False, action=argparse.BooleanOptionalAction, help='🔥 禁用AudioCLIP蒸馏')
+    parser.add_argument('--audioclip_model_path', type=str, default='/root/autodl-tmp/teacher_models/audioclip/AudioCLIP-Full-Training.pt', help='AudioCLIP模型路径（已禁用）')
+    parser.add_argument('--audioclip_temperature', type=float, default=2.0, help='AudioCLIP蒸馏温度（已禁用）')
+    parser.add_argument('--audioclip_alpha', type=float, default=0.7, help='AudioCLIP蒸馏权重（已禁用）')
+    
+    # 🔥 CLIP蒸馏参数 (已弃用)
+    parser.add_argument('--use_multi_teacher_distillation', default=False, action=argparse.BooleanOptionalAction, help='禁用CLIP蒸馏（效果不佳）')
+    parser.add_argument('--teacher_model_dir', type=str, default='/root/autodl-tmp/teacher_models', help='教师模型目录（可选）')
+    parser.add_argument('--clip_model_path', type=str, default='/root/autodl-tmp/huggingface_cache/clip-vit-base-patch32', help='本地CLIP模型路径')
+    
+    # 🔥 MoE参数 (Mixture of Experts)
+    parser.add_argument('--use_moe', default=False, action=argparse.BooleanOptionalAction, help='在交叉注意力的FFN中使用MoE')
+    parser.add_argument('--num_experts', type=int, default=4, help='MoE专家数量')
+    parser.add_argument('--top_k', type=int, default=2, help='MoE每次激活的专家数量')
+    parser.add_argument('--moe_load_balance_weight', type=float, default=0.01, help='MoE负载均衡损失权重')
 
-    # PaSST parameters
-    parser.add_argument('--s_patchout_t', type=int, default=15, help='Temporal patchout size')
-    parser.add_argument('--s_patchout_f', type=int, default=2, help='Frequency patchout size')
-    parser.add_argument('--mel_freqm', type=int, default=24, help='Mel SpecAugment freq mask (0=disable)')
-    parser.add_argument('--mel_timem', type=int, default=96, help='Mel SpecAugment time mask (0=disable)')
+    # ============ 多音频编码器融合参数 ============
+    parser.add_argument('--use_multi_encoder', default=True, action=argparse.BooleanOptionalAction,
+                        help='🔥 默认启用多音频编码器融合')
+    parser.add_argument('--use_passt', default=True, action=argparse.BooleanOptionalAction,
+                        help='🔥 使用PaSST编码器')
+    parser.add_argument('--use_beats', default=False, action=argparse.BooleanOptionalAction,
+                        help='🔥 禁用BEATs（PaSST+CLAP效果更好）')
+    parser.add_argument('--use_clap', default=True, action=argparse.BooleanOptionalAction,
+                        help='🔥 使用CLAP编码器')
+    parser.add_argument('--fusion_type', type=str, default='attention',
+                        choices=['concat', 'weighted', 'attention'],
+                        help='🔥 默认使用attention融合策略')
+    parser.add_argument('--beats_model_path', type=str,
+                        default='/root/autodl-tmp/teacher_models/beats/BEATs_iter3_plus_AS2M.pt',
+                        help='BEATs模型路径')
+    parser.add_argument('--clap_model_name', type=str,
+                        default='/root/autodl-tmp/teacher_models/clap/clap-htsat-unfused',
+                        help='CLAP模型名称或路径')
 
-    # RoBERTa parameters - 切换到roberta-base
-    parser.add_argument('--roberta_base', default=True, action=argparse.BooleanOptionalAction,  help='切换到Roberta base（更适合小数据集）')
+    # ============ 多粒度语义对齐参数 ============
+    parser.add_argument('--use_multi_granularity', default=False, action=argparse.BooleanOptionalAction,
+                        help='🔥 禁用多粒度对齐（显存不足）')
+    parser.add_argument('--mg_global_weight', type=float, default=1.0,
+                        help='多粒度对齐中全局相似度的权重')
+    parser.add_argument('--mg_local_weight', type=float, default=0.0,
+                        help='多粒度对齐中局部相似度的权重')
+
+    # PaSST parameters - 🔥 回到基线的数据增强
+    parser.add_argument('--s_patchout_t', type=int, default=15, help='🔥 回到基线的15')
+    parser.add_argument('--s_patchout_f', type=int, default=2, help='🔥 回到基线的2')
+    parser.add_argument('--mel_freqm', type=int, default=48, help='频率mask')
+    parser.add_argument('--mel_timem', type=int, default=192, help='时间mask')
+
+    # RoBERTa parameters - 🔥 回到基线：使用roberta-large
+    parser.add_argument('--roberta_base', default=False, action=argparse.BooleanOptionalAction,  help='🔥 回到基线：使用roberta-large')
     parser.add_argument('--roberta_model_path', type=str, default='/root/autodl-tmp/huggingface_cache', help='本地RoBERTa模型路径')
     
     # use additional data sets...
     parser.add_argument('--wavcaps', default=False, action=argparse.BooleanOptionalAction, help='Include WavCaps in the training or not.')
-    parser.add_argument('--audiocaps', default=True, action=argparse.BooleanOptionalAction, help='Include AudioCaps in the training or not. (默认启用)')
+    parser.add_argument('--audiocaps', default=True, action=argparse.BooleanOptionalAction, help='🔥 默认使用AudioCaps增加训练数据')
     parser.add_argument('--ablate_clean_setup', default=True, action=argparse.BooleanOptionalAction, help='Include ClothoV2.1 eval, test in the training or not.')
 
     # Paths
@@ -232,12 +314,6 @@ if __name__ == '__main__':
         # ============================================
         # 🚀 激进学习率重启策略 - 突破0.29平台期
         # ============================================
-        
-        # 设置CUDA内存优化
-        import os
-        os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
-        print("✅ 已设置 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True")
-        print()
         
         args = get_args()
         roberta_model_path=args['roberta_model_path']
@@ -323,6 +399,196 @@ if __name__ == '__main__':
             model_args = dict(args)
             model_args['roberta_model_path'] = roberta_model_path  # 传递本地路径
             model = AudioRetrievalModel(**model_args)
+        
+        # ============ 加载多音频编码器（如果启用）============
+        if args['use_multi_encoder']:
+            print("=" * 60)
+            print("🎵 初始化多音频编码器...")
+            print("=" * 60)
+            
+            try:
+                # 加载BEATs
+                if args['use_beats']:
+                    print("📥 加载BEATs模型...")
+                    from d25_t6.multi_audio_encoder import load_beats_model
+                    
+                    beats_model = load_beats_model(
+                        model_path=args['beats_model_path'],
+                        device='cuda' if torch.cuda.is_available() else 'cpu'
+                    )
+                    
+                    if beats_model is not None:
+                        model.audio_embedding_model.set_beats_encoder(beats_model)
+                        print(f"✅ BEATs加载成功: {args['beats_model_path']}")
+                    else:
+                        print("⚠️ BEATs加载失败，将只使用PaSST")
+                        args['use_beats'] = False
+                
+                # 加载CLAP
+                if args['use_clap']:
+                    print("📥 加载CLAP模型...")
+                    from d25_t6.multi_audio_encoder import load_clap_model
+                    
+                    clap_model = load_clap_model(
+                        model_name=args['clap_model_name'],
+                        device='cuda' if torch.cuda.is_available() else 'cpu'
+                    )
+                    
+                    if clap_model is not None:
+                        model.audio_embedding_model.set_clap_encoder(clap_model)
+                        print(f"✅ CLAP加载成功: {args['clap_model_name']}")
+                    else:
+                        print("⚠️ CLAP加载失败，将只使用PaSST")
+                        args['use_clap'] = False
+                
+                # 打印配置摘要
+                print("=" * 60)
+                print("📊 多编码器配置:")
+                print(f"   - PaSST: {'✅' if args['use_passt'] else '❌'}")
+                print(f"   - BEATs: {'✅' if args['use_beats'] else '❌'}")
+                print(f"   - CLAP: {'✅' if args['use_clap'] else '❌'}")
+                print(f"   - 融合策略: {args['fusion_type']}")
+                print("=" * 60)
+                
+            except Exception as e:
+                print(f"❌ 多音频编码器初始化失败: {e}")
+                import traceback
+                traceback.print_exc()
+                print("⚠️ 回退到单编码器模式（仅PaSST）")
+                model.use_multi_encoder = False
+        
+        # 🔥 加载AudioCLIP教师蒸馏模型（方案C - 最强优化）
+        if args['use_audioclip_distillation']:
+            print("=" * 50)
+            print("🎓 加载AudioCLIP教师蒸馏模型...")
+            print("=" * 50)
+            try:
+                from d25_t6.audioclip_distillation import load_audioclip_teacher
+                
+                teacher, distill_loss_fn = load_audioclip_teacher(
+                    model_path=args['audioclip_model_path'],
+                    temperature=args['audioclip_temperature'],
+                    alpha=args['audioclip_alpha'],
+                    device='cuda' if torch.cuda.is_available() else 'cpu'
+                )
+                
+                if teacher is not None:
+                    # 将教师模型和蒸馏损失函数添加到模型
+                    model.audioclip_teacher = teacher
+                    model.audioclip_distillation_loss_fn = distill_loss_fn
+                    model.use_audioclip_distillation = True
+                    
+                    print("✅ AudioCLIP教师蒸馏模型加载成功！")
+                    print(f"   - 模型路径: {args['audioclip_model_path']}")
+                    print(f"   - 蒸馏温度: {args['audioclip_temperature']}")
+                    print(f"   - 蒸馏权重: {args['audioclip_alpha']}")
+                else:
+                    print("⚠️ AudioCLIP教师模型加载失败，将继续使用标准训练")
+                    model.use_audioclip_distillation = False
+                    model.audioclip_teacher = None
+                    
+                print("=" * 50)
+            except Exception as e:
+                print(f"❌ AudioCLIP教师蒸馏模型加载失败: {e}")
+                print("   将继续使用标准训练（无AudioCLIP蒸馏）")
+                import traceback
+                traceback.print_exc()
+                model.use_audioclip_distillation = False
+                model.audioclip_teacher = None
+                print("=" * 50)
+        else:
+            model.use_audioclip_distillation = False
+            model.audioclip_teacher = None
+        
+        # 🔥 加载CLIP教师蒸馏模型（已弃用，保留兼容性）
+        if args['use_multi_teacher_distillation']:
+            print("=" * 50)
+            print("🎓 加载单教师蒸馏模型（AudioCLIP）...")
+            print("=" * 50)
+            try:
+                teacher_ensemble = load_teacher_ensemble(
+                    teacher_model_dir=args.get('teacher_model_dir'),
+                    clip_model_path=args.get('clip_model_path'),  # 传递本地CLIP路径
+                    device='cuda' if torch.cuda.is_available() else 'cpu'
+                )
+                
+                # 将教师模型和蒸馏损失函数添加到模型
+                model.teacher_ensemble = teacher_ensemble
+                model.multi_teacher_distillation_loss_fn = MultiTeacherDistillationLoss(
+                    temperature=args['distill_temperature'],
+                    alpha=args['distill_alpha']
+                )
+                model.use_multi_teacher_distillation = True
+                
+                print("✅ 单教师蒸馏模型加载成功！")
+                print(f"   - 蒸馏温度: {args['distill_temperature']}")
+                print(f"   - 蒸馏权重: {args['distill_alpha']}")
+                print("=" * 50)
+            except Exception as e:
+                print(f"❌ 单教师蒸馏模型加载失败: {e}")
+                print("   将继续使用标准训练（无蒸馏）")
+                model.use_multi_teacher_distillation = False
+                model.teacher_ensemble = None
+                print("=" * 50)
+        else:
+            model.use_multi_teacher_distillation = False
+            model.teacher_ensemble = None
+        
+        # 🔥 初始化聚类器（用于聚类引导分类）
+        if args['use_clustering_classification']:
+            print("=" * 50)
+            print("🎯 初始化聚类器（Clustering-Guided Classification）...")
+            print("=" * 50)
+            try:
+                from d25_t6.clustering_classification import prepare_clustering
+                
+                # 🔥 先将模型移到GPU
+                if torch.cuda.is_available():
+                    model = model.cuda()
+                    print(f"✅ 模型已移到GPU: {next(model.parameters()).device}")
+                
+                # 需要先加载训练数据集
+                temp_train_ds = custom_loading(Clotho(subset="dev", root=args["data_path"], flat_captions=True))
+                
+                # 准备聚类
+                cache_path = os.path.join(args['checkpoints_path'], 'cluster_cache.pkl')
+                clusterer = prepare_clustering(
+                    temp_train_ds, 
+                    model, 
+                    num_clusters=args['num_clusters'],
+                    cache_path=cache_path
+                )
+                
+                # 将聚类器添加到模型
+                model.clusterer = clusterer
+                
+                # 🔥 清理显存：聚类完成后释放GPU缓存
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                    print(f"✅ GPU缓存已清理")
+                    # 显示当前显存使用
+                    allocated = torch.cuda.memory_allocated() / 1024**3
+                    reserved = torch.cuda.memory_reserved() / 1024**3
+                    print(f"   当前显存: 已分配 {allocated:.2f}GB, 已保留 {reserved:.2f}GB")
+                
+                print("✅ 聚类器初始化成功！")
+                print(f"   - 聚类数量: {args['num_clusters']}")
+                print(f"   - 聚类权重: {args['clustering_weight']}")
+                print("=" * 50)
+            except Exception as e:
+                print(f"❌ 聚类器初始化失败: {e}")
+                print("   将继续训练（无聚类分类）")
+                import traceback
+                traceback.print_exc()
+                model.use_clustering_classification = False
+                model.clusterer = None
+                # 即使失败也清理显存
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                print("=" * 50)
+        else:
+            model.use_clustering_classification = False
+            model.clusterer = None
 
         # train
         if args['train']:

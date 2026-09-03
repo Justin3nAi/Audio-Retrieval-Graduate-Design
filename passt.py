@@ -9,7 +9,7 @@ warnings.filterwarnings("ignore", category=UserWarning, module="hearpasst")
 
 
 class PaSSTSNoOverlapWrapper(torch.nn.Module):
-    def __init__(self, s_patchout_t=15, s_patchout_f=2, pretrained_path="pretrained_models/passt-s-f128-p16-s16-ap.468.pt", freqm=24, timem=96):
+    def __init__(self, s_patchout_t=15, s_patchout_f=2, pretrained_path="pretrained_models/passt-s-f128-p16-s16-ap.468.pt", freqm=24, timem=96, skip_pretrained=False):
       
         
         super().__init__()
@@ -26,7 +26,9 @@ class PaSSTSNoOverlapWrapper(torch.nn.Module):
         )
         
         # 从指定路径加载预训练权重
-        if pretrained_path is not None:
+        if skip_pretrained:
+            print("⚠️ 跳过预训练模型加载，将从checkpoint加载权重")
+        elif pretrained_path is not None:
             if os.path.exists(pretrained_path):
                 print(f"✓ 从指定路径加载预训练模型: {pretrained_path}")
                 state_dict = torch.load(pretrained_path, map_location='cpu')
@@ -44,7 +46,8 @@ class PaSSTSNoOverlapWrapper(torch.nn.Module):
                     print(f"⚠️ 意外的键: {unexpected_keys}")
                     
             else:
-                raise FileNotFoundError(f"预训练模型文件不存在: {pretrained_path}")
+                print(f"⚠️ 预训练模型文件不存在: {pretrained_path}")
+                print("   将跳过预训练权重，从checkpoint加载")
         else:
             print("⚠️ 未提供预训练模型路径，模型将使用随机初始化权重")
 

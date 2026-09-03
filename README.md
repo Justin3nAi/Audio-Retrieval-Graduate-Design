@@ -1,153 +1,255 @@
-# DCASE 2025 Task 6 - Audio-Text Retrieval
+# 🎵 Multi-Encoder Audio-Text Retrieval System
 
-## 📁 项目结构
+A retrieval-based audio-text matching system combining PaSST and CLAP encoders with attention-based fusion, achieving **mAP@10 = 0.32** on Clotho evaluation set.
 
-```
-d25_t6/
-├── docs/                    # 📚 所有项目文档（统一管理）
-│   ├── QUICK_START.md      # 🔥 快速启动指南
-│   ├── COMPLETE_FIX_GUIDE.md  # 完整修复指南
-│   ├── CRITICAL_FIX_OVERFITTING.md  # 问题诊断
-│   └── INDEX.md            # 文档索引
-│
-├── datasets/                # 数据集加载模块
-├── train.py                 # 训练脚本
-├── retrieval_module.py      # 模型定义
-├── passt.py                 # PaSST音频编码器
-└── predict.py               # 预测脚本
-
-```
-
-## 🚀 快速开始
-
-### 1. 查看文档
-所有文档都在 `docs/` 文件夹中：
-
-```bash
-cd docs
-# 查看快速启动指南
-cat QUICK_START.md
-```
-
-### 2. 启动训练
-直接在项目根目录运行：
-
-```bash
-python train.py
-```
-
-### 3. 监控训练
-打开 W&B 监控页面，关注 `val/mAP@10` 指标。
-
-## 🎯 当前状态
-
-### ✅ 已修复的问题
-- **过拟合问题**: 训练到第10轮后指标下降
-- **Hard Negative Mining**: 已禁用，避免过度拟合
-- **正则化不足**: 已增加 weight_decay 和 dropout
-- **缺少早停**: 已添加 EarlyStopping callback
-
-### 🎯 训练目标
-- **当前**: mAP@10 = 0.29 (过拟合前的峰值)
-- **短期目标**: mAP@10 = 0.30 (Epoch 15)
-- **中期目标**: mAP@10 = 0.32-0.33 (Epoch 25)
-- **最终目标**: mAP@10 = 0.34-0.35 (Epoch 30-40)
-
-## 📚 文档导航
-
-### 🔥 必读文档
-1. **[QUICK_START.md](docs/QUICK_START.md)** - 快速启动指南
-2. **[COMPLETE_FIX_GUIDE.md](docs/COMPLETE_FIX_GUIDE.md)** - 完整修复指南
-3. **[CRITICAL_FIX_OVERFITTING.md](docs/CRITICAL_FIX_OVERFITTING.md)** - 问题诊断
-
-### 📖 参考文档
-4. **[INDEX.md](docs/INDEX.md)** - 文档索引
-5. **[LEARNING_RATE_RESTART_STRATEGY.md](docs/LEARNING_RATE_RESTART_STRATEGY.md)** - 学习率重启策略
-6. **[RESTART_FROM_BEST_CHECKPOINT.md](docs/RESTART_FROM_BEST_CHECKPOINT.md)** - 检查点恢复
-
-## 🔧 核心配置
-
-### 模型
-- **Audio Encoder**: PaSST (86M 参数)
-- **Text Encoder**: RoBERTa-base (125M 参数)
-- **总参数**: ~211M
-
-### 数据集
-- **Clotho**: ~3,800 样本
-- **AudioCaps**: ~49,838 样本
-- **总计**: ~53,638 样本
-
-### 训练参数（已修复）
-```python
-# 损失函数
-loss_type = "infonce"  # 禁用 Hard Negative Mining
-
-# 正则化
-weight_decay = 0.02    # 增加到 0.02
-dropout_rate = 0.15    # 增加到 0.15
-
-# 学习率
-max_lr = 5e-5          # 降低到 5e-5
-warmup_epochs = 5      # 增加到 5
-restart_period = 10    # 每10轮重启
-
-# 训练
-max_epochs = 50        # 配合早停
-batch_size = 48
-accumulate_grad_batches = 2  # 有效batch=96
-
-# 早停
-patience = 8           # 8轮不提升就停止
-```
-
-## 📊 监控指标
-
-### 主要指标
-- **val/mAP@10**: 主要评估指标
-- **val/R@5**: Recall@5
-- **val/R@10**: Recall@10
-
-### 关键检查点
-| Epoch | 预期 mAP@10 | 说明 |
-|-------|-------------|------|
-| 5 | 0.24 | Warmup 完成 |
-| 10 | 0.28 | 第一次重启，**不应该下降** ✅ |
-| 15 | 0.30 | 突破 0.30 🎉 |
-| 20 | 0.32 | 持续上升 |
-| 30 | 0.34-0.35 | 达到目标 🎯 |
-
-## 💡 常见问题
-
-### Q: 如何查看文档？
-**A**: 所有文档都在项目根目录的 `docs/` 文件夹中。
-
-### Q: 训练多久能看到效果？
-**A**: 前5轮是warmup，第10轮是关键检查点。如果第10轮后验证指标不下降，说明修复有效。
-
-### Q: 如何判断是否还在过拟合？
-**A**: 观察 `val/mAP@10` 曲线，如果在某个epoch后持续下降，说明仍在过拟合。
-
-## 🚀 立即开始
-
-```bash
-# 启动训练
-python train.py
-
-# 打开 W&B 监控页面
-# 观察 val/mAP@10 指标
-```
-
-## 📞 需要帮助？
-
-1. 查看 `docs/QUICK_START.md` 快速启动指南
-2. 查看 `docs/COMPLETE_FIX_GUIDE.md` 完整修复指南
-3. 查看 `docs/INDEX.md` 文档索引
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg)](https://pytorch.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
 
-**目标**: 从 mAP@10 = 0.29 提升到 0.34-0.35 🎯
+## 🚀 Quick Start
 
-**状态**: ✅ 过拟合问题已修复，准备开始新训练
+### 1. Clone Repository
+```bash
+git clone https://github.com/Justin3nAi/Audio-Retrieval-Graduate-Design.git
+cd Audio-Retrieval-Graduate-Design
+```
 
-*最后更新: 2026-02-04*
+### 2. Install Dependencies
+```bash
+pip install -r requirements.txt
+```
 
+### 3. Download Model Weights
+
+**Option A: From HuggingFace (Recommended)**
+```bash
+python scripts/download_model.py
+```
+
+**Option B: Manual Download**
+- Download from: [Google Drive Link](https://drive.google.com/your-link)
+- Place `model.ckpt` in `audio_app/checkpoints/`
+
+### 4. Run Gradio Web Application
+```bash
+# Linux/Mac
+bash audio_app/start_app.sh
+
+# Windows
+audio_app\start_app.bat
+
+# Or directly
+python audio_app/run_app.py
+```
+
+The application will launch at `http://localhost:7860`
+
+---
+
+## 📖 What is This?
+
+This project implements a **retrieval-based audio-text matching system** that:
+
+1. **Encodes audio** using complementary encoders (PaSST + CLAP)
+2. **Fuses representations** using attention-based mechanism
+3. **Retrieves descriptions** from a candidate library of 80,045 captions
+4. **Deploys as web app** with 2-3 second processing time on CPU
+
+### Key Features
+
+- ✅ **Multi-encoder fusion**: Combines time-frequency patterns (PaSST) and audio-text semantics (CLAP)
+- ✅ **Retrieval-based**: Fast similarity search without generative overhead
+- ✅ **Real-time inference**: 2-3 seconds per audio clip on standard CPU
+- ✅ **Web interface**: Easy-to-use Gradio application
+
+---
+
+## 🎯 Performance
+
+| Model | mAP@10 | R@1 | R@10 |
+|-------|--------|-----|------|
+| PaSST-only | 0.290 | 0.181 | 0.588 |
+| CLAP-only | 0.271 | 0.161 | 0.560 |
+| **Multi-encoder fusion** | **0.325** | **0.203** | **0.623** |
+
+- **+12.1%** improvement over PaSST-only
+- **+20.0%** improvement over CLAP-only
+- Evaluated on Clotho dataset
+
+---
+
+## 📁 Project Structure
+
+```
+Audio-Retrieval-Graduate-Design/
+├── audio_app/                          # Gradio web application
+│   ├── audio_caption_app.py           # Main application
+│   ├── run_app.py                     # Application launcher
+│   ├── candidate_captions.json        # 80,045 candidate descriptions
+│   ├── requirements_app.txt           # Application dependencies
+│   ├── start_app.sh                   # Linux/Mac launcher
+│   └── start_app.bat                  # Windows launcher
+│
+├── retrieval_module.py                # Core retrieval model
+├── multi_audio_encoder.py             # PaSST + CLAP fusion
+├── passt.py                           # PaSST encoder wrapper
+├── clap_encoder.py                    # CLAP encoder wrapper
+├── train.py                           # Training script
+├── predict.py                         # Inference script
+│
+├── datasets/                          # Data loading utilities
+│   ├── audio_loading.py
+│   └── __init__.py
+│
+├── scripts/                           # Helper scripts
+│   ├── download_model.py              # Model weight downloader
+│   └── extract_captions.py            # Caption extraction utility
+│
+├── requirements.txt                   # Project dependencies
+├── .gitignore
+└── README.md
+```
+
+---
+
+## 💻 Usage
+
+### Web Application (Recommended)
+
+1. Launch the Gradio interface:
+```bash
+python audio_app/run_app.py
+```
+
+2. Open browser at `http://localhost:7860`
+
+3. Upload audio file or record via microphone
+
+4. Get top-10 retrieved descriptions with similarity scores
+
+### Command-Line Inference
+
+```bash
+python predict.py --audio_path path/to/audio.wav --checkpoint path/to/model.ckpt
+```
+
+### Training
+
+```bash
+python train.py \
+    --batch_size 32 \
+    --max_epochs 50 \
+    --learning_rate 2e-5
+```
+
+---
+
+## 🔧 System Requirements
+
+### Minimum Requirements
+- Python 3.8+
+- 4GB RAM
+- CPU-only supported
+
+### Recommended Requirements
+- Python 3.8+
+- 8GB+ RAM
+- NVIDIA GPU with 12GB+ VRAM (for training)
+
+### Dependencies
+- PyTorch 2.0+
+- Transformers 4.30+
+- Gradio 4.0+
+- librosa 0.10+
+- hear21passt (PaSST model)
+- aac-datasets (CLAP model)
+
+---
+
+## 📊 Technical Details
+
+### Architecture
+
+**Audio Branch:**
+- PaSST: Pre-trained on AudioSet, captures time-frequency patterns
+- CLAP: Pre-trained with audio-text contrastive learning
+- Attention fusion: Dynamically weights encoder outputs
+
+**Text Branch:**
+- RoBERTa-large: 1024-dimensional text embeddings
+- Candidate library: 80,045 unique descriptions from Clotho + AudioCaps
+
+**Retrieval:**
+- Cosine similarity in joint embedding space
+- Returns top-K most similar descriptions
+
+### Training
+
+- **Loss**: InfoNCE contrastive loss
+- **Optimizer**: AdamW (lr=2e-5)
+- **Augmentation**: SpecAugment (time mask 15 frames, freq mask 2 bins)
+- **Batch size**: 32
+- **Epochs**: 50
+
+---
+
+## 📝 Citation
+
+If you use this code in your research, please cite:
+
+```bibtex
+@misc{Audio-Retrieval-Graduate-Design-2026,
+  author = {Yuanzhi Zhu},
+  title = {Multi-Encoder Audio-Text Retrieval System},
+  year = {2026},
+  publisher = {GitHub},
+  url = {https://github.com/Justin3nAi/Audio-Retrieval-Graduate-Design}
+}
+```
+
+---
+
+## 🙏 Acknowledgments
+
+This project builds upon:
+
+- [PaSST](https://github.com/kkoutini/PaSST) - Patchout Spectrogram Transformer
+- [CLAP](https://github.com/LAION-AI/CLAP) - Contrastive Language-Audio Pretraining
+- [Clotho](https://zenodo.org/record/3490684) - Audio captioning dataset
+- [AudioCaps](https://audiocaps.github.io/) - Audio captioning dataset
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## 🐛 Issues and Contributions
+
+- **Bug reports**: [Open an issue](https://github.com/Justin3nAi/Audio-Retrieval-Graduate-Design/issues)
+- **Feature requests**: [Open an issue](https://github.com/Justin3nAi/Audio-Retrieval-Graduate-Design/issues)
+- **Pull requests**: Welcome!
+
+---
+
+## 📧 Contact
+
+For questions or discussions:
+
+- **GitHub Issues**: [Project Issues](https://github.com/Justin3nAi/Audio-Retrieval-Graduate-Design/issues)
+- **Email**: 1628575421@qq.com
+
+---
+
+## 🌟 Star History
+
+If you find this project helpful, please consider giving it a ⭐!
+
+---
+
+**Last Updated**: March 2026  
+**Status**: Active Development

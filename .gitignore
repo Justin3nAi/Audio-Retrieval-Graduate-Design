@@ -21,52 +21,100 @@ wheels/
 *.egg
 
 # Virtual Environment
+.env
+.venv
+env/
 venv/
 ENV/
-env/
+env.bak/
+venv.bak/
+.conda/
 
 # IDE
 .vscode/
 .idea/
+.cursor/
 *.swp
 *.swo
 *~
 
-# Jupyter Notebook
-.ipynb_checkpoints
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
 
-# PyTorch
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Model weights and checkpoints
+*.ckpt
 *.pth
 *.pt
-*.ckpt
-
-# Data
-data/
-datasets/
-*.wav
-*.mp3
-*.flac
-
-# Checkpoints
+*.bin
+*.safetensors
 checkpoints/
-*.ckpt
-*.pth
+models/
+audio_app/Train*/
+audio_app/*/*.ckpt
+
+# Data files
+data/
+datasets/*.wav
+datasets/*.mp3
+datasets/*.flac
+datasets/*.csv
+datasets/*.json
+!audio_app/candidate_captions.json
+
+# Cache files
+*.pkl
+*.cache
+*_cache_*.pkl
+caption_embeddings_cache_*.pkl
 
 # Logs
 logs/
-*.log
 wandb/
+lightning_logs/
+*.log
+
+# Results
+results/
+outputs/
+experiments/
+
+# Documentation (exclude from GitHub, keep locally)
+essay/
+docs/KIM_PAPER_ANALYSIS.md
+docs/FINAL_TRAINING_SUMMARY.md
+Monthly_Report_*.md
+Monthly_Report_*.txt
+*.potx
+*.pptx
+*.docx
+*.pdf
+
+# Experimental code
+ChangeHistory/
+OldStructure/
+*_backup.py
+*.backup
+
+# Temporary files
+*.tmp
+*.temp
+_scan_*.py
+_tmp_*.py
+_generate_*.py
+_inspect_*.py
+_github_upload_plan.md
 
 # OS
 .DS_Store
 Thumbs.db
+desktop.ini
 
-# Temporary files
-*.tmp
-*.bak
-*.cache
-
-# Model cache
-huggingface_cache/
-pretrained_models/
-
+# Git
+.git/

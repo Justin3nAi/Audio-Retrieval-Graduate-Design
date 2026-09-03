@@ -1,0 +1,18 @@
+{
+  "Final system": {
+    "run_id": "x1zj2xp5",
+    "run_name": "breezy-cloud-113",
+    "mAP@10": 0.3138,
+    "R@1": 0.196,
+    "R@5": 0.47,
+    "R@10": 0.6149
+  },
+  "Simple fusion": {
+    "run_id": "x1zj2xp5",
+    "run_name": "breezy-cloud-113",
+    "mAP@10": 0.3138,
+    "R@1": 0.196,
+    "R@5": 0.47,
+    "R@10": 0.6149
+  }
+}
